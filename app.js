@@ -1,164 +1,205 @@
 $(document).ready(function () {
     
-    // Caminho do arquivo XML de dados da estação meteorológica
-    const xmlSource = "dados_estacao.xml";
+    // Configurações locais de conexão com o servidor Java do professor
+    const SERVER_URL = "http://localhost:8080";
+    const USUARIO = "admin";
+    const SENHA = "123456";
+    
+    let tokenSessao = null;
+    let historicoTemperatura = [];
+    const MAX_HISTORICO = 5;
 
-    // ==========================================
-    // CARREGAMENTO DE DADOS (AJAX e XML)
-    // ==========================================
-    function carregarDadosMeteorologicos() {
-        $.ajax({
-            type: "GET",
-            url: xmlSource,
-            dataType: "xml",
-            success: function (xml) {
-                processarDados(xml);
-            },
-            error: function () {
-                console.warn("Arquivo XML não encontrado. Executando simulação de dados para fins de desenvolvimento.");
-                gerarDadosSimulados();
-            }
-        });
-    }
-
-    // Processa a árvore XML e distribui os dados nos componentes
-    function processarDados(xml) {
-        // Captura da leitura atual (Tempo Real)
-        let temperatura = parseFloat($(xml).find("leitura_atual temperatura").text());
-        let umidade = parseFloat($(xml).find("leitura_atual umidade").text());
-        let chuva = parseFloat($(xml).find("leitura_atual precipitacao").text());
-        let vento = parseFloat($(xml).find("leitura_atual vento").text());
-
-        atualizarInterface(temperatura, umidade, chuva, vento);
-
-        // Captura do Histórico para montar o Histograma
-        let historicoContainer = $("#histograma-temp");
-        historicoContainer.empty(); // Limpa as barras anteriores
-
-        $(xml).find("historico leitura").each(function () {
-            let hora = $(this).find("hora").text();
-            let tempHist = parseFloat($(this).find("temperatura").text());
-            
-            // Renderiza o elemento visual da coluna
-            let alturaBarra = (tempHist / 50) * 100; // Mapeamento proporcional (máx 50°C)
-            let colunaHtml = `
-                <div class="hist-column">
-                    <div class="hist-bar" style="height: ${alturaBarra}%">
-                        <span>${tempHist}°</span>
-                    </div>
-                    <div class="hist-time">${hora}</div>
-                </div>
-            `;
-            historicoContainer.append(colunaHtml);
-        });
-    }
-
-    // Alimenta os elementos HTML com os valores processados
-    function atualizarInterface(temp, umid, chuva, vento) {
-        // 1. Números Digitais
-        $("#val-temp").text(temp.toFixed(1));
-        $("#val-umid").text(umid);
-        $("#val-chuva").text(chuva.toFixed(1));
-        $("#val-vento").text(vento.toFixed(1));
-
-        // 2. Gráficos de Medição (Gauges por barras de preenchimento)
-        let percentualTemp = (temp / 50) * 100; // Limite de 50 graus
-        $("#gauge-temp").css("width", percentualTemp + "%");
-        $("#gauge-umid").css("width", umid + "%");
-
-        // 4. Comparação de Dados Simultâneos
-        $("#comp-bar-chuva").css("width", (chuva * 2) + "%"); // Fator de escala para visualização
-        $("#comp-txt-chuva").text(chuva + "mm");
-        
-        $("#comp-bar-temp").css("width", (temp * 2) + "%");
-        $("#comp-txt-temp").text(temp + "°C");
-    }
-
-    // Fallback: Gera dados aleatórios coerentes se o XML não estiver acessível
-    function gerarDadosSimulados() {
-        let mockXml = `<?xml version="1.0" encoding="UTF-8"?>
-        <estacao>
-            <leitura_atual>
-                <temperatura>26.4</temperatura>
-                <umidade>72</umidade>
-                <precipitacao>12.5</precipitacao>
-                <vento>18.2</vento>
-            </leitura_atual>
-            <historico>
-                <leitura><hora>12:00</hora><temperatura>22.1</temperatura></leitura>
-                <leitura><hora>14:00</hora><temperatura>25.4</temperatura></leitura>
-                <leitura><hora>16:00</hora><temperatura>28.9</temperatura></leitura>
-                <leitura><hora>18:00</hora><temperatura>26.4</temperatura></leitura>
-            </historico>
-        </estacao>`;
-        
-        let parser = new DOMParser();
-        let xmlDoc = parser.parseFromString(mockXml, "text/xml");
-        processarDados(xmlDoc);
-    }
-
-    // Executa a leitura inicial de dados
-    carregarDadosMeteorologicos();
-    // Atualiza automaticamente os dados do XML a cada 30 segundos
-    setInterval(carregarDadosMeteorologicos, 30000);
-
-
-    // ==========================================
-    // 6. GESTÃO E NAVEGAÇÃO (Menu / Painel Administrativo)
-    // ==========================================
-    $("#btn-admin").click(function () {
-        $("#admin-panel").toggleClass("hidden");
-        $(this).toggleClass("active-btn");
-    });
-
-    // Controladores de Alternância na Área Administrativa (Ativar/Desativar blocos)
-    $(".btn-toggle").each(function() {
-        let targetId = $(this).data("target");
-        // Se o elemento está visível, adiciona classe ativa no botão correspondente
-        if (!$(`#${targetId}`).hasClass("hidden")) {
-            $(this).addClass("active-btn");
+    // ============================================================
+    // GERENCIADOR DE CONEXÃO E MONITORAMENTO VIA API
+    // ============================================================
+    
+    function gerenciarCicloSistema() {
+        // Se não possui token, inicia o processo de autenticação (Login)
+        if (!tokenSessao) {
+            $.ajax({
+                type: "GET",
+                url: `${SERVER_URL}/aut`,
+                data: { usuario: USUARIO, senha: SENHA },
+                timeout: 2000, // Tempo limite de 2 segundos para detectar servidor desligado
+                cache: false,  // Impede que o navegador use dados em cache
+                success: function (resposta) {
+                    if (resposta.startsWith("1")) {
+                        let partes = resposta.split("TOKEN=");
+                        tokenSessao = partes[1].trim();
+                        
+                        // Altera visualmente o status para conectado
+                        $("#val-status").text("Conectado").css("color", "#10b981");
+                        console.log("Autenticação bem-sucedida. Token ativo:", tokenSessao);
+                        
+                        // Dispara a leitura imediata das portas dos sensores
+                        executarLeituraSensores();
+                    } else {
+                        marcarComoOffline();
+                    }
+                },
+                error: function () {
+                    // Entra aqui se o servidor Java estiver desligado ou inacessível
+                    marcarComoOffline();
+                }
+            });
+        } else {
+            // Se já possui token ativo, faz apenas a leitura dos sensores
+            executarLeituraSensores();
         }
-    });
+    }
 
-    $(".btn-toggle").click(function () {
-        let targetId = $(this).data("target");
-        $(`#${targetId}`).toggleClass("hidden");
-        $(this).toggleClass("active-btn");
-    });
+    // Requisição AJAX individual por sensor exigido
+    function puxarDadosSensor(idSensor) {
+        return $.ajax({
+            type: "GET",
+            url: `${SERVER_URL}/get`,
+            data: { token: tokenSessao, sensor: idSensor },
+            timeout: 2000,
+            cache: false
+        }).then(function(resposta) {
+            if (resposta.startsWith("v")) {
+                return parseInt(resposta.substring(1), 10); // Retorna o valor bruto (0-4095)
+            }
+            // Se a sessão expirou no servidor (Erro -3), limpa o token localmente
+            if (resposta === "-3") {
+                tokenSessao = null;
+            }
+            throw new Error(`Código de rejeição da API: ${resposta}`);
+        });
+    }
 
+    // Consulta os 3 sensores em paralelo
+    function executarLeituraSensores() {
+        $.when(
+            puxarDadosSensor("a1"), // Temperatura
+            puxarDadosSensor("a2"), // Pressão
+            puxarDadosSensor("a3")  // Luminosidade
+        ).done(function(brutoA1, brutoA2, brutoA3) {
+            
+            // Força a exibição do status conectado e verde a cada resposta com sucesso
+            $("#val-status").text("Conectado").css("color", "#10b981");
+
+            // Conversão matemática padrão dos dados analógicos de 12 bits para unidades reais
+            let temperatura = ((brutoA1 / 4095) * 60) - 10;   // Escala: -10°C a +50°C
+            let pressao = 950 + ((brutoA2 / 4095) * 100);       // Escala: 950 hPa a 1050 hPa
+            let luminosidade = (brutoA3 / 4095) * 1000;         // Escala: 0 a 1000 lux
+
+            // Transmite os dados reais coletados para os medidores e caixas
+            atualizerInterface(temperatura, pressao, luminosidade);
+
+        }).fail(function(erro) {
+            console.warn("A requisição dos sensores falhou. O servidor pode ter sido desativado.");
+            marcarComoOffline();
+        });
+    }
 
     // ==========================================
-    // 7. PAINEL FLEXÍVEL (Controle de Ordem e Remoção)
+    // TRATAMENTO EXCLUSIVO DE DESCONEXÃO (OFFLINE)
+    // ==========================================
+    function marcarComoOffline() {
+        // Reseta as credenciais locais para que o sistema tente relogar no próximo ciclo
+        tokenSessao = null;
+        
+        // CORREÇÃO: Altera instantaneamente o status para vermelho na tela
+        $("#val-status").text("Offline").css("color", "#ef4444");
+        
+        // Zera os indicadores numéricos para indicar a ausência de sinal da API
+        $("#val-temp").text("--");
+        $("#val-pressao").text("--");
+        $("#val-luminosidade").text("--");
+        
+        // Recolhe todos os medidores visuais e gráficos para zero
+        $("#gauge-temp").css("width", "0%");
+        $("#gauge-pressao").css("width", "0%");
+        $("#comp-bar-lux").css("width", "0%");
+        $("#comp-bar-temp").css("width", "0%");
+    }
+
+    // ==========================================
+    // ATUALIZAÇÃO DO LAYOUT COM DADOS REAIS
+    // ==========================================
+    function _interfaceAtualizar(temp, pressao, lux) {
+        // Alimenta as caixas digitais de texto
+        $("#val-temp").text(temp.toFixed(1));
+        $("#val-pressao").text(Math.round(pressao));
+        $("#val-luminosidade").text(Math.round(lux));
+
+        // Define a largura proporcional dos medidores de nível (Gauges)
+        let pctTemp = Math.max(0, Math.min(100, (temp / 50) * 100));
+        $("#gauge-temp").css("width", pctTemp + "%");
+        
+        let pctPressao = ((pressao - 950) / 100) * 100;
+        $("#gauge-pressao").css("width", pctPressao + "%");
+
+        // Desenha as barras de comparação simultânea
+        let pctLux = (lux / 1000) * 100;
+        $("#comp-bar-lux").css("width", pctLux + "%");
+        $("#comp-txt-lux").text(Math.round(lux) + " lx");
+        
+        $("#comp-bar-temp").css("width", pctTemp + "%");
+        $("#comp-txt-temp").text(temp.toFixed(1) + "°C");
+
+        // Alimenta o histograma de histórico de temperatura
+        gerarHistograma(temp);
+    }
+    
+    window.atualizerInterface = _interfaceAtualizar;
+
+    function gerarHistograma(novaTemp) {
+        let agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        historicoTemperatura.push({ hora: agora, valor: novaTemp });
+        if (historicoTemperatura.length > MAX_HISTORICO) {
+            historicoTemperatura.shift();
+        }
+
+        let container = $("#histograma-temp").empty();
+        historicoTemperatura.forEach(function (ponto) {
+            let altura = Math.max(5, (ponto.valor / 50) * 100);
+            container.append(`
+                <div class="hist-column">
+                    <div class="hist-bar" style="height: ${altura}%">
+                        <span>${ponto.valor.toFixed(1)}°</span>
+                    </div>
+                    <div class="hist-time">${ponto.hora}</div>
+                </div>
+            `);
+        });
+    }
+
+    // ==========================================
+    // EXECUÇÃO DO LOOP CONTÍNUO DO PAINEL
     // ==========================================
     
-    // Ação do Botão Fechar (Remover Bloco do Painel)
+    // Executa a primeira checagem de conexão imediatamente
+    gerenciarCicloSistema();
+    
+    // Mantém a verificação e atualização ativa a cada 5 segundos
+    setInterval(gerenciarCicloSistema, 5000);
+
+    // ==========================================
+    // GESTÃO DOS CARDS DINÂMICOS (MANTIDOS)
+    // ==========================================
+    $("#btn-admin").click(function () { $("#admin-panel").toggleClass("hidden"); });
+    
+    $(".btn-toggle").click(function () {
+        let target = $(this).data("target");
+        $(`#${target}`).toggleClass("hidden");
+        $(this).toggleClass("active-btn");
+    });
+
     $(document).on("click", ".btn-close", function () {
-        let card = $(this).closest(".widget-card");
-        let cardId = card.attr("id");
-        
-        card.addClass("hidden"); // Oculta o elemento da visualização
-        
-        // Sincroniza o botão correspondente no menu administrativo
-        $(`.btn-toggle[data-target="${cardId}"]`).removeClass("active-btn");
+        let id = $(this).closest(".widget-card").addClass("hidden").attr("id");
+        $(`.btn-toggle[data-target="${id}"]`).removeClass("active-btn");
     });
 
-    // Mover Bloco para Cima (Alterar Ordem)
     $(document).on("click", ".btn-move-up", function () {
-        let currentCard = $(this).closest(".widget-card");
-        let previousCard = currentCard.prev(".widget-card");
-        
-        if (previousCard.length > 0) {
-            currentCard.insertBefore(previousCard);
-        }
+        let card = $(this).closest(".widget-card");
+        if (card.prev(".widget-card").length > 0) card.insertBefore(card.prev(".widget-card"));
     });
 
-    // Mover Bloco para Baixo (Alterar Ordem)
     $(document).on("click", ".btn-move-down", function () {
-        let currentCard = $(this).closest(".widget-card");
-        let nextCard = currentCard.next(".widget-card");
-        
-        if (nextCard.length > 0) {
-            currentCard.insertAfter(nextCard);
-        }
+        let card = $(this).closest(".widget-card");
+        if (card.next(".widget-card").length > 0) card.insertAfter(card.next(".widget-card"));
     });
 });

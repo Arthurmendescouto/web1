@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Estação Meteorológica - Monitoramento</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <!-- Importação do jQuery via CDN -->
+    <link rel="stylesheet" href="styles.css">
     <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
 </head>
 <body>
 
-    <!-- 6. NAVEGAÇÃO: Barra de Título e Menu Principal -->
     <header class="main-header">
         <div class="logo">
             <h1>METEO<span>SENSE</span></h1>
@@ -20,7 +18,6 @@
         </nav>
     </header>
 
-    <!-- 6. GESTÃO: Área Administrativa (Controle do Sistema) -->
     <section id="admin-panel" class="admin-panel hidden">
         <h2>Painel de Controle Administrativo</h2>
         <p>Gerencie a exibição dos blocos de informação na tela:</p>
@@ -33,10 +30,8 @@
         </div>
     </section>
 
-    <!-- 7. PAINEL FLEXÍVEL: Grade de Widgets Dinâmicos -->
     <main id="dashboard" class="dashboard-grid">
 
-        <!-- 1. EXIBIÇÃO DE NÚMEROS: Caixas de texto em tempo real -->
         <article id="widget-numeros" class="widget-card" data-order="1">
             <div class="widget-header">
                 <h3>Dados em Tempo Real</h3>
@@ -48,25 +43,24 @@
             </div>
             <div class="widget-body grid-2x2">
                 <div class="data-box">
-                    <label>Temperatura</label>
+                    <label>Temperatura (A1)</label>
                     <div class="value-display"><span id="val-temp">--</span> °C</div>
                 </div>
                 <div class="data-box">
-                    <label>Umidade</label>
-                    <div class="value-display"><span id="val-umid">--</span> %</div>
+                    <label>Pressão Atmosférica (A2)</label>
+                    <div class="value-display"><span id="val-pressao">--</span> hPa</div>
                 </div>
                 <div class="data-box">
-                    <label>Chuva (Precipitação)</label>
-                    <div class="value-display"><span id="val-chuva">--</span> mm</div>
+                    <label>Luminosidade (A3)</label>
+                    <div class="value-display"><span id="val-luminosidade">--</span> lux</div>
                 </div>
                 <div class="data-box">
-                    <label>Vento</label>
-                    <div class="value-display"><span id="val-vento">--</span> km/h</div>
+                    <label>Status da API</label>
+                    <div class="value-display" id="val-status" style="font-size: 1.1rem; color: #eab308;">Aguardando...</div>
                 </div>
             </div>
         </article>
 
-        <!-- 2. GRÁFICOS DE MEDIÇÃO: Medidores visuais por barras de progresso -->
         <article id="widget-medidores" class="widget-card" data-order="2">
             <div class="widget-header">
                 <h3>Medidores de Nível (Gauge)</h3>
@@ -78,41 +72,38 @@
             </div>
             <div class="widget-body">
                 <div class="gauge-container">
-                    <div class="gauge-label">Temperatura Extrema (Escala de 0 a 50°C)</div>
+                    <div class="gauge-label">Temperatura Real (Escala: -10°C a 50°C)</div>
                     <div class="gauge-bar-bg">
                         <div id="gauge-temp" class="gauge-bar-fill temp-fill" style="width: 0%"></div>
                     </div>
                 </div>
                 <div class="gauge-container">
-                    <div class="gauge-label">Umidade Relativa (Escala de 0 a 100%)</div>
+                    <div class="gauge-label">Pressão Atmosférica (Escala: 950 a 1050 hPa)</div>
                     <div class="gauge-bar-bg">
-                        <div id="gauge-umid" class="gauge-bar-fill umid-fill" style="width: 0%"></div>
+                        <div id="gauge-pressao" class="gauge-bar-fill pressao-fill" style="width: 0%"></div>
                     </div>
                 </div>
             </div>
         </article>
 
-        <!-- 3. HISTÓRICO SIMPLES: Histograma de variação temporal -->
         <article id="widget-historico" class="widget-card" data-order="3">
             <div class="widget-header">
-                <h3>Histórico de Temperatura (Últimas Horas)</h3>
+                <h3>Histórico de Temperatura (Tempo Real)</h3>
                 <div class="widget-actions">
                     <button class="btn-move-up">▲</button>
                     <button class="btn-move-down">▼</button>
                     <button class="btn-close">✕</button>
                 </div>
             </div>
-            <div class="widget-body text-center">
+            <div class="widget-body">
                 <div id="histograma-temp" class="histogram-container">
-                    <!-- Barras injetadas dinamicamente via JS -->
-                </div>
+                    </div>
             </div>
         </article>
 
-        <!-- 4. COMPARAÇÃO DE DADOS: Gráfico comparativo simultâneo -->
         <article id="widget-comparacao" class="widget-card" data-order="4">
             <div class="widget-header">
-                <h3>Comparação Direta: Chuva vs Temperatura</h3>
+                <h3>Comparação Direta: Luminosidade vs Temperatura</h3>
                 <div class="widget-actions">
                     <button class="btn-move-up">▲</button>
                     <button class="btn-move-down">▼</button>
@@ -122,12 +113,12 @@
             <div class="widget-body">
                 <div class="compare-container">
                     <div class="compare-row">
-                        <span class="compare-label">Chuva (mm):</span>
-                        <div class="bar-chart-w"><div id="comp-bar-chuva" class="bar-fill-blue" style="width: 0%"></div></div>
-                        <span id="comp-txt-chuva" class="compare-val">0mm</span>
+                        <span class="compare-label">Luminosidade:</span>
+                        <div class="bar-chart-w"><div id="comp-bar-lux" class="bar-fill-yellow" style="width: 0%"></div></div>
+                        <span id="comp-txt-lux" class="compare-val">0 lx</span>
                     </div>
                     <div class="compare-row">
-                        <span class="compare-label">Temp (°C):</span>
+                        <span class="compare-label">Temperatura:</span>
                         <div class="bar-chart-w"><div id="comp-bar-temp" class="bar-fill-orange" style="width: 0%"></div></div>
                         <span id="comp-txt-temp" class="compare-val">0°C</span>
                     </div>
@@ -135,7 +126,6 @@
             </div>
         </article>
 
-        <!-- 5. MAPA: Localização da Estação em Quadro Fixo -->
         <article id="widget-mapa" class="widget-card" data-order="5">
             <div class="widget-header">
                 <h3>Localização Geográfica da Estação</h3>
@@ -146,18 +136,12 @@
                 </div>
             </div>
             <div class="widget-body no-padding">
-                <!-- Quadro com Google Maps incorporado apontando para as coordenadas da estação -->
-                <iframe 
-                    class="map-frame"
-                    src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d14948.431234!2d-40.8393!3d-14.8622!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1spt-BR!2sbr!4v1700000000000!5m2!1spt-BR!2sbr" 
-                    allowfullscreen="" 
-                    loading="lazy">
-                </iframe>
+                <iframe class="map-frame" src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d14948.431234!2d-40.8393!3d-14.8622!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1spt-BR!2sbr!4v1700000000000!5m2!1spt-BR!2sbr" allowfullscreen="" loading="lazy"></iframe>
             </div>
         </article>
 
     </main>
 
-    <script src="js/app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
